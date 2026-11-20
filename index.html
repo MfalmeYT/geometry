@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Game Hub</title>
+<style>
+:root{--bg:#0b0f14;--panel:#121923;--panel2:#18212e;--text:#e6edf5;--mute:#8b9bb0;--accent:#6ea8ff;--line:#223044}
+:root.light{--bg:#f3f6fb;--panel:#fff;--panel2:#eef2f8;--text:#14202e;--mute:#5d6f86;--line:#d8e0ec}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;display:flex;gap:12px;align-items:center;padding:12px 20px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0;letter-spacing:.3px}
+#q{flex:1;max-width:480px;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;outline:none}
+#q:focus{border-color:var(--accent)}
+button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;padding:14px 20px 0}
+.chip{padding:6px 12px;border-radius:999px;font-size:13px}
+.chip.on{background:var(--accent);color:#08111f;border-color:var(--accent)}
+main{padding:10px 20px 40px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--mute);margin:22px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
+.card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;cursor:pointer;content-visibility:auto;contain-intrinsic-size:170px 190px;transition:transform .12s,border-color .12s}
+.card:hover{transform:translateY(-3px);border-color:var(--accent)}
+.thumb{aspect-ratio:4/3;display:grid;place-items:center;font-size:44px;font-weight:800;color:#fff;background-size:cover;background-position:center}
+.meta{padding:10px 12px}
+.meta b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta span{color:var(--mute);font-size:12px}
+.fav{position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:8px;background:#0008;border:0;color:#fff;font-size:16px}
+.fav.on{color:#ffd24a}
+.empty{color:var(--mute);padding:30px 0}
+#player{position:fixed;inset:0;background:#000;z-index:20;display:none;flex-direction:column}
+#player.open{display:flex}
+#bar{display:flex;gap:8px;align-items:center;padding:8px 12px;background:var(--panel)}
+#bar .t{flex:1;font-weight:700}
+#frame{flex:1;border:0;width:100%;background:#000}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:20px;min-width:300px}
+dialog::backdrop{background:#0009}
+.row{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:12px 0}
+kbd{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+</style></head>
+<body>
+<header>
+  <h1>Game Hub</h1>
+  <input id="q" type="search" placeholder="Search games  ( press / )" autocomplete="off">
+  <button id="rand" title="Random game">🎲</button>
+  <button id="set" title="Settings">⚙</button>
+</header>
+<div class="chips" id="chips"></div>
+<main id="main"></main>
+
+<div id="player">
+  <div id="bar">
+    <button id="back">← Back</button><span class="t" id="ptitle"></span>
+    <button id="pfav">☆</button><button id="reload">⟳</button><button id="full">⛶ Fullscreen</button>
+  </div>
+  <iframe id="frame" allow="autoplay; fullscreen; gamepad" referrerpolicy="no-referrer"></iframe>
+</div>
+
+<dialog id="dlg">
+  <h3 style="margin-top:0">Settings</h3>
+  <div class="row"><span>Emergency key</span><button id="rebind"></button></div>
+  <div class="row"><span>Light theme</span><input type="checkbox" id="light"></div>
+  <div class="row"><span>Clear recents &amp; favorites</span><button id="wipe">Reset</button></div>
+  <p style="color:var(--mute);font-size:13px;margin:6px 0 14px">The emergency key closes any game and goes straight to ClassLink Launchpad.</p>
+  <button id="close">Done</button>
+</dialog>
+
+<script>
+const $=s=>document.querySelector(s);
+const PANIC_URL='https://launchpad.classlink.com';
+const store={get:(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+let games=[],cat='All',fav=store.get('fav',[]),recent=store.get('recent',[]),cfg=store.get('cfg',{key:{ctrl:true,shift:false,alt:false,code:'KeyY'},light:false}),current=null;
+
+/* ---------- emergency key ---------- */
+const label=k=>[k.ctrl&&'Ctrl',k.alt&&'Alt',k.shift&&'Shift',k.code.replace(/^Key|^Digit/,'')].filter(Boolean).join(' + ');
+function panic(){$('#frame').src='about:blank';location.replace(PANIC_URL)}
+function matches(e){const k=cfg.key;return e.code===k.code&&e.ctrlKey===k.ctrl&&e.shiftKey===k.shift&&e.altKey===k.alt}
+let rebinding=false;
+function onKey(e){
+  if(rebinding){
+    if(/^(Control|Shift|Alt|Meta)/.test(e.key))return;
+    e.preventDefault();cfg.key={ctrl:e.ctrlKey,shift:e.shiftKey,alt:e.altKey,code:e.code};
+    store.set('cfg',cfg);rebinding=false;$('#rebind').textContent=label(cfg.key);return;
+  }
+  if(matches(e)){e.preventDefault();e.stopPropagation();panic();return}
+  if(e.key==='/'&&!current&&document.activeElement!==$('#q')){e.preventDefault();$('#q').focus()}
+  if(e.key==='Escape'&&current)closeGame();
+}
+addEventListener('keydown',onKey,true);
+
+/* ---------- rendering ---------- */
+const hue=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return h};
+function card(g){
+  const el=document.createElement('div');el.className='card';
+  const bg=g.thumb?`background-image:url('${g.thumb}')`:`background-image:linear-gradient(135deg,hsl(${hue(g.title)} 70% 45%),hsl(${(hue(g.title)+50)%360} 70% 30%))`;
+  el.innerHTML=`<div class="thumb" style="${bg}">${g.thumb?'':g.title[0].toUpperCase()}</div><div class="meta"><b></b><span></span></div><button class="fav ${fav.includes(g.id)?'on':''}">${fav.includes(g.id)?'★':'☆'}</button>`;
+  el.querySelector('b').textContent=g.title;el.querySelector('span').textContent=g.category;
+  el.onclick=e=>{if(e.target.classList.contains('fav')){toggleFav(g.id);return}openGame(g)};
+  return el;
+}
+function section(title,list,root){
+  if(!list.length)return;
+  const h=document.createElement('h2');h.textContent=title;root.append(h);
+  const gr=document.createElement('div');gr.className='grid';const f=document.createDocumentFragment();
+  list.forEach(g=>f.append(card(g)));gr.append(f);root.append(gr);
+}
+function render(){
+  const q=$('#q').value.trim().toLowerCase(),root=$('#main');root.textContent='';
+  const byId=id=>games.find(g=>g.id===id);
+  const match=g=>(cat==='All'||g.category===cat)&&(!q||g.title.toLowerCase().includes(q));
+  if(!q&&cat==='All'){
+    section('Recently played',recent.map(byId).filter(Boolean).slice(0,6),root);
+    section('Favorites',fav.map(byId).filter(Boolean),root);
+  }
+  const list=games.filter(match).sort((a,b)=>a.title.localeCompare(b.title));
+  section(q||cat!=='All'?'Results':'All games',list,root);
+  if(!list.length){const d=document.createElement('div');d.className='empty';d.textContent='No games found.';root.append(d)}
+}
+function chips(){
+  const cats=['All',...new Set(games.map(g=>g.category))];const box=$('#chips');box.textContent='';
+  cats.forEach(c=>{const b=document.createElement('button');b.className='chip'+(c===cat?' on':'');b.textContent=c;b.onclick=()=>{cat=c;chips();render()};box.append(b)});
+}
+function toggleFav(id){fav=fav.includes(id)?fav.filter(x=>x!==id):[...fav,id];store.set('fav',fav);render();if(current)$('#pfav').textContent=fav.includes(current.id)?'★':'☆'}
+
+/* ---------- player ---------- */
+function openGame(g){
+  current=g;recent=[g.id,...recent.filter(x=>x!==g.id)].slice(0,12);store.set('recent',recent);
+  $('#ptitle').textContent=g.title;$('#pfav').textContent=fav.includes(g.id)?'★':'☆';
+  const f=$('#frame');f.onload=()=>{try{f.contentWindow.addEventListener('keydown',onKey,true);f.contentWindow.focus()}catch{}};
+  f.src=g.path;$('#player').classList.add('open');history.pushState({g:g.id},'');
+}
+function closeGame(fromPop){
+  if(!current)return;current=null;$('#frame').src='about:blank';$('#player').classList.remove('open');render();
+  if(!fromPop&&history.state&&history.state.g)history.back();
+}
+addEventListener('popstate',()=>closeGame(true));
+$('#back').onclick=()=>closeGame();
+$('#reload').onclick=()=>{const f=$('#frame');f.src=f.src};
+$('#full').onclick=()=>$('#frame').requestFullscreen?.();
+$('#pfav').onclick=()=>current&&toggleFav(current.id);
+
+/* ---------- settings / misc ---------- */
+$('#set').onclick=()=>{$('#rebind').textContent=label(cfg.key);$('#light').checked=cfg.light;$('#dlg').showModal()};
+$('#close').onclick=()=>{rebinding=false;$('#dlg').close()};
+$('#rebind').onclick=()=>{rebinding=true;$('#rebind').textContent='Press a combo…'};
+$('#light').onchange=e=>{cfg.light=e.target.checked;store.set('cfg',cfg);document.documentElement.classList.toggle('light',cfg.light)};
+$('#wipe').onclick=()=>{fav=[];recent=[];store.set('fav',fav);store.set('recent',recent);render()};
+$('#rand').onclick=()=>games.length&&openGame(games[Math.random()*games.length|0]);
+let tm;$('#q').oninput=()=>{clearTimeout(tm);tm=setTimeout(render,80)};
+document.documentElement.classList.toggle('light',cfg.light);
+
+fetch('games.json').then(r=>r.json()).then(j=>{games=j;chips();render()}).catch(()=>{$('#main').innerHTML='<div class="empty">Could not load games.json</div>'});
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body></html>
