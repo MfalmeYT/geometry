@@ -5,5 +5,11 @@
     "category": "Arcade",
     "path": "games/snake/index.html",
     "thumb": ""
+    
+    "id": "gd",
+    "title": "Geometry Dash",
+    "category": "Arcade",
+    "path": "games/gd/index.html",
+    "thumb":" "
   }
 ]
