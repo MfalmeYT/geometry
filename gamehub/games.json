@@ -1,0 +1,9 @@
+[
+  {
+    "id": "snake",
+    "title": "Snake",
+    "category": "Arcade",
+    "path": "games/snake/index.html",
+    "thumb": ""
+  }
+]

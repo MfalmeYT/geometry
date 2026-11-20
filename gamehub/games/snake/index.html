@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Snake</title>
+<style>html,body{margin:0;height:100%;background:#0b0f14;display:grid;place-items:center;color:#cfe;font:600 16px system-ui}canvas{background:#111821;border-radius:8px;max-width:96vmin;max-height:90vmin}</style></head>
+<body><canvas id="c" width="400" height="400"></canvas>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d'),N=20,S=20;
+let s,d,n,f,sc,t,over;
+function reset(){s=[{x:10,y:10}];d={x:1,y:0};n=d;sc=0;over=false;food()}
+function food(){f={x:Math.random()*N|0,y:Math.random()*N|0};if(s.some(p=>p.x==f.x&&p.y==f.y))food()}
+addEventListener('keydown',e=>{
+ const m={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]}[e.key];
+ if(m&&!(m[0]==-d.x&&m[1]==-d.y)){n={x:m[0],y:m[1]};e.preventDefault()}
+ if(e.key==' '&&over)reset()});
+function step(){
+ if(over)return;d=n;const h={x:s[0].x+d.x,y:s[0].y+d.y};
+ if(h.x<0||h.y<0||h.x>=N||h.y>=N||s.some(p=>p.x==h.x&&p.y==h.y)){over=true;return}
+ s.unshift(h);if(h.x==f.x&&h.y==f.y){sc++;food()}else s.pop()}
+function draw(){
+ x.clearRect(0,0,400,400);x.fillStyle='#ff5d73';x.fillRect(f.x*S+2,f.y*S+2,S-4,S-4);
+ x.fillStyle='#4ade80';s.forEach(p=>x.fillRect(p.x*S+1,p.y*S+1,S-2,S-2));
+ x.fillStyle='#cfe';x.font='14px system-ui';x.fillText('Score '+sc,8,16);
+ if(over){x.font='24px system-ui';x.fillText('Game over - press Space',70,200)}}
+reset();let last=0;
+function loop(ts){if(ts-last>110){step();last=ts}draw();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script></body></html>
